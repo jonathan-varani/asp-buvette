@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin buvette — ASP Basket</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#111111">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <img src="logo.png" alt="Logo ASP Basket">
+  <h1>Admin buvette<small>ASP Basket Sainte-Marie-aux-Chênes</small></h1>
+  <a class="top-link" href="index.html">Planning public</a>
+</div></header>
+<main>
+  <div id="login" class="login" hidden>
+    <label for="pwd"><strong>Mot de passe</strong></label>
+    <input id="pwd" type="password" autocomplete="current-password" style="margin-top:8px">
+    <div class="actions"><button class="btn primary" id="go">Se connecter</button><span id="lerr" class="err" hidden></span></div>
+  </div>
+
+  <div id="app" hidden>
+    <div id="open" class="banner" hidden>⚠️ Aucun mot de passe n'est défini : la modification est ouverte à tous.</div>
+    <div class="nav">
+      <button id="prev" aria-label="Semaine précédente">‹</button>
+      <div class="title" id="title"></div>
+      <button id="next" aria-label="Semaine suivante">›</button>
+    </div>
+    <div class="tools">
+      <button class="chip" id="today">Aujourd'hui</button>
+      <button class="chip" id="onlyTodo" aria-pressed="false">À pourvoir seulement</button>
+      <button class="chip ghost" id="logout">Se déconnecter</button>
+    </div>
+    <p class="salle">Seuls les matchs à domicile ont un responsable de buvette. Laissez vide puis « Effacer » pour retirer.</p>
+    <div id="msg"></div>
+    <div id="list"></div>
+  </div>
+</main>
+<script src="common.js"></script>
+<script>
+let pwd = "";
+try { pwd = sessionStorage.getItem("buvette_pwd") || ""; } catch (e) {}
+let week = queryWeek();
+let todoOnly = false;
+let data = [];
+const $ = id => document.getElementById(id);
+
+async function tryLogin(p) {
+  try { return await sbRpc("admin_check", { p_password: p }) === true; } catch (e) { return false; }
+}
+
+async function start() {
+  const openAccess = await tryLogin("");
+  $("open").hidden = !openAccess;
+  if (openAccess) { pwd = ""; return showApp(); }
+  if (pwd && await tryLogin(pwd)) return showApp();
+  $("login").hidden = false;
+  $("app").hidden = true;
+}
+function showApp() { $("login").hidden = true; $("app").hidden = false; load(); }
+
+$("go").onclick = async () => {
+  const p = $("pwd").value;
+  if (await tryLogin(p)) {
+    pwd = p;
+    try { sessionStorage.setItem("buvette_pwd", p); } catch (e) {}
+    $("lerr").hidden = true;
+    showApp();
+  } else {
+    $("lerr").textContent = "Mot de passe incorrect";
+    $("lerr").hidden = false;
+  }
+};
+$("pwd").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
+$("logout").onclick = () => {
+  try { sessionStorage.removeItem("buvette_pwd"); } catch (e) {}
+  location.reload();
+};
+
+function card(m) {
+  const b = buvetteOf(m);
+  const wrap = el("div", "");
+  const form = el("div", "form");
+  const pr = el("input"); pr.type = "text"; pr.placeholder = "Prénom"; pr.value = b ? b.prenom : ""; pr.maxLength = 40; pr.autocomplete = "off";
+  const nm = el("input"); nm.type = "text"; nm.placeholder = "Nom"; nm.value = b ? b.nom : ""; nm.maxLength = 40; nm.autocomplete = "off";
+  form.append(pr, nm);
+  const act = el("div", "actions");
+  const save = el("button", "btn primary", "Enregistrer");
+  const clear = el("button", "btn", "Effacer");
+  const st = el("span", "saved", "");
+  act.append(save, clear, st);
+  const flash = (t, bad) => { st.textContent = t; st.style.color = bad ? "var(--red-dark)" : ""; };
+  save.onclick = async () => {
+    if (!pr.value.trim() || !nm.value.trim()) return flash("Prénom et nom requis", true);
+    save.disabled = true;
+    try {
+      await sbRpc("buvette_set", { p_password: pwd, p_match_id: m.id, p_prenom: pr.value, p_nom: nm.value });
+      flash("✓ Enregistré");
+      m.buvette = { prenom: pr.value.trim(), nom: nm.value.trim() };
+    } catch (e) { flash(e.message, true); }
+    save.disabled = false;
+  };
+  clear.onclick = async () => {
+    try {
+      await sbRpc("buvette_clear", { p_password: pwd, p_match_id: m.id });
+      pr.value = ""; nm.value = ""; m.buvette = null;
+      flash("✓ Effacé");
+    } catch (e) { flash(e.message, true); }
+  };
+  wrap.append(form, act);
+  return matchCard(m, wrap);
+}
+
+function render() {
+  const list = $("list");
+  list.replaceChildren();
+  $("title").replaceChildren(weekTitle(week).main);
+  const rows = data.filter(m => m.domicile && m.statut !== "annule" && (!todoOnly || !buvetteOf(m)));
+  if (!rows.length) {
+    list.append(el("div", "empty", todoOnly ? "Tout est pourvu pour ce weekend 👍" : "Aucun match à domicile ce weekend."));
+    return;
+  }
+  for (const [day, ms] of groupByDay(rows)) {
+    list.append(dayHeading(day));
+    ms.forEach(m => list.append(card(m)));
+  }
+}
+
+async function load() {
+  setQueryWeek(week);
+  $("msg").replaceChildren();
+  try { data = await loadWeek(week, true); }
+  catch (e) { data = []; $("msg").replaceChildren(el("div", "err", "Chargement impossible. Réessayez.")); }
+  render();
+}
+$("prev").onclick = () => { week = addDays(week, -7); load(); };
+$("next").onclick = () => { week = addDays(week, 7); load(); };
+$("today").onclick = () => { week = mondayOf(new Date()); load(); };
+$("onlyTodo").onclick = () => {
+  todoOnly = !todoOnly;
+  $("onlyTodo").setAttribute("aria-pressed", String(todoOnly));
+  render();
+};
+start();
+</script>
+</body>
+</html>

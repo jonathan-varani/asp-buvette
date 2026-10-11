@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buvette ASP Basket</title>
+<meta name="description" content="Planning des matchs du weekend et des responsables de buvette — ASP Basket Sainte-Marie-aux-Chênes">
+<meta name="theme-color" content="#111111">
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <img src="logo.png" alt="Logo ASP Basket">
+  <h1>Planning buvette<small>ASP Basket Sainte-Marie-aux-Chênes</small></h1>
+  <a class="top-link" href="admin.html">Admin</a>
+</div></header>
+<main>
+  <div class="nav">
+    <button id="prev" aria-label="Weekend précédent">‹</button>
+    <div class="title" id="title"></div>
+    <button id="next" aria-label="Weekend suivant">›</button>
+  </div>
+  <div class="tools">
+    <button class="chip" id="fAll" aria-pressed="true">Tous les matchs</button>
+    <button class="chip" id="fHome" aria-pressed="false">Domicile</button>
+    <button class="chip ghost" id="today">Aujourd'hui</button>
+  </div>
+  <div id="msg"></div>
+  <div id="list"></div>
+</main>
+<footer id="foot"></footer>
+<script src="common.js"></script>
+<script>
+let week = queryWeek();
+let homeOnly = false;
+let data = [];
+
+function render() {
+  const list = document.getElementById("list");
+  list.replaceChildren();
+  const t = weekTitle(week);
+  document.getElementById("title").replaceChildren(t.main);
+  const rows = data.filter(m => !homeOnly || m.domicile);
+  if (!rows.length) {
+    list.append(el("div", "empty", homeOnly ? "Aucun match à domicile ce weekend." : "Aucun match ce weekend."));
+    return;
+  }
+  for (const [day, ms] of groupByDay(rows)) {
+    list.append(dayHeading(day));
+    for (const m of ms) {
+      let extra = null;
+      if (m.domicile && m.statut !== "annule") {
+        const b = buvetteOf(m);
+        if (b) extra = el("div", "buvette set", "🍺 Buvette : " + b.prenom + " " + b.nom);
+        else if (!m.joue) extra = el("div", "buvette todo", "🍺 Buvette : responsable à définir");
+      }
+      list.append(matchCard(m, extra));
+    }
+  }
+}
+
+async function load() {
+  const msg = document.getElementById("msg");
+  msg.replaceChildren();
+  setQueryWeek(week);
+  try {
+    data = await loadWeek(week, true);
+  } catch (e) {
+    data = [];
+    msg.replaceChildren(el("div", "err", "Impossible de charger le planning. Réessayez dans un instant."));
+  }
+  render();
+}
+
+function go(n) { week = addDays(week, n * 7); load(); }
+document.getElementById("prev").onclick = () => go(-1);
+document.getElementById("next").onclick = () => go(1);
+document.getElementById("today").onclick = () => { week = mondayOf(new Date()); load(); };
+function setFilter(h) {
+  homeOnly = h;
+  document.getElementById("fAll").setAttribute("aria-pressed", String(!h));
+  document.getElementById("fHome").setAttribute("aria-pressed", String(h));
+  render();
+}
+document.getElementById("fAll").onclick = () => setFilter(false);
+document.getElementById("fHome").onclick = () => setFilter(true);
+
+(async () => {
+  load();
+  try {
+    const [s] = await sbGet("sync_log?select=started_at&ok=eq.true&order=id.desc&limit=1");
+    if (s) document.getElementById("foot").textContent =
+      "Matchs mis à jour le " + new Date(s.started_at).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

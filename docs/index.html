@@ -52,7 +52,7 @@ function render() {
       let extra = null;
       if (m.domicile && m.statut !== "annule") {
         const b = buvetteOf(m);
-        if (b) extra = el("div", "buvette set", "🍺 Buvette : " + b.prenom + " " + b.nom);
+        if (b) extra = el("div", "buvette set", "🍺 Buvette : " + b.libelle);
         else if (!m.joue) extra = el("div", "buvette todo", "🍺 Buvette : responsable à définir");
       }
       list.append(matchCard(m, extra));

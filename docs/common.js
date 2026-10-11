@@ -81,7 +81,7 @@ function dayHeading(isoDate) {
 }
 async function loadWeek(mon, withBuvette) {
   const from = iso(mon), to = iso(addDays(mon, 6));
-  const sel = withBuvette ? "*,buvette(prenom,nom)" : "*";
+  const sel = withBuvette ? "*,buvette(libelle)" : "*";
   return sbGet("matches?select=" + encodeURIComponent(sel) + "&date=gte." + from + "&date=lte." + to + "&order=date.asc,heure.asc.nullsfirst");
 }
 function buvetteOf(m) { const b = m.buvette; return Array.isArray(b) ? b[0] : b; }

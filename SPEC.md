@@ -37,7 +37,7 @@ Hors V1 : formulaire permettant à un parent de s'inscrire lui-même (V2).
 ## 5. Règles métier
 - **Domicile** = `equipe1` contient « STE MARIE AUX CHENES » (équipes - 1, - 2, etc. incluses).
 - Matchs amicaux : affichés comme les autres, avec une mention « Amical ».
-- Un seul responsable par match : un prénom et un nom (pas de téléphone).
+- Un seul responsable par match : un texte libre d'une ligne (ex. « Julie Martin », « Famille Dupont »), avec complétion depuis la liste des personnes gérée en admin.
 - Weekend = samedi + dimanche (vendredi soir et lundi : à valider, voir §10).
 - Affichage par défaut : weekend en cours (ou le prochain si on est en semaine après le dimanche).
 - Historique consultable via navigation weekend précédent/suivant et sélecteur de date.
@@ -63,8 +63,14 @@ Hors V1 : formulaire permettant à un parent de s'inscrire lui-même (V2).
 | Colonne | Type | Note |
 |---|---|---|
 | `match_id` | text PK, FK → matches | |
-| `prenom`, `nom` | text | |
+| `libelle` | text (1–100 car.) | texte libre sur une ligne affiché publiquement |
 | `updated_at` | timestamptz | |
+
+**`personnes`** (liste de suggestions pour la complétion en admin, **non lisible publiquement**)
+| Colonne | Type | Note |
+|---|---|---|
+| `id` | bigint PK | |
+| `libelle` | text (1–100 car.) | unique sans tenir compte de la casse |
 
 Sécurité (RLS) : lecture publique (anon) sur `matches` et `buvette` ; aucune écriture anon.
 Écriture `matches` : clé service role (PC uniquement, dans `.env`).

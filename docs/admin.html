@@ -26,7 +26,7 @@
     <div id="open" class="banner" hidden>⚠️ Aucun mot de passe n'est défini : la modification est ouverte à tous.</div>
     <div class="tools" style="margin-top:0">
       <button class="chip" id="tabMatchs" aria-pressed="true">Matchs</button>
-      <button class="chip" id="tabPersonnes" aria-pressed="false">Liste <span id="count"></span></button>
+      <button class="chip" id="tabPersonnes" aria-pressed="false">Personnes <span id="count"></span></button>
       <button class="chip ghost" id="logout">Se déconnecter</button>
     </div>
 
@@ -41,27 +41,27 @@
         <button class="chip" id="today">Aujourd'hui</button>
         <button class="chip" id="onlyTodo" aria-pressed="false">À pourvoir seulement</button>
       </div>
-      <p class="salle">Seuls les matchs à domicile ont un responsable de buvette. Tapez librement ou choisissez dans la liste.</p>
+      <p class="salle">Seuls les matchs à domicile ont un responsable de buvette. Tapez librement ou choisissez parmi les personnes.</p>
       <div id="msg"></div>
       <div id="list"></div>
     </section>
 
-    <!-- Liste -->
+    <!-- Personnes -->
     <section id="viewPersonnes" hidden>
       <div class="login" style="margin-top:0">
-        <strong>Ajouter à la liste</strong>
+        <strong>Ajouter une personne</strong>
         <div class="form single">
-          <input id="newLibelle" type="text" placeholder="Texte affiché (ex : Julie Martin, Famille Dupont)" maxlength="100" autocomplete="off">
+          <input id="newLibelle" type="text" placeholder="Nom affiché (ex : Julie Martin, Famille Dupont)" maxlength="100" autocomplete="off">
         </div>
         <div class="actions"><button class="btn primary" id="addPerson">Ajouter</button><span id="addSt" class="saved"></span></div>
         <details style="margin-top:12px">
-          <summary>Importer plusieurs lignes</summary>
-          <p class="salle">Une entrée par ligne. Les doublons sont ignorés.</p>
+          <summary>Importer plusieurs personnes</summary>
+          <p class="salle">Une personne par ligne. Les doublons sont ignorés.</p>
           <textarea id="bulk" rows="6" placeholder="Julie Martin&#10;Famille Dupont&#10;Jean-Pierre (papa de Léo)"></textarea>
           <div class="actions"><button class="btn" id="bulkGo">Importer</button><span id="bulkSt" class="saved"></span></div>
         </details>
       </div>
-      <div class="tools"><input id="search" type="text" placeholder="Rechercher dans la liste…" autocomplete="off"></div>
+      <div class="tools"><input id="search" type="text" placeholder="Rechercher une personne…" autocomplete="off"></div>
       <div id="pmsg"></div>
       <div id="people"></div>
     </section>
@@ -130,7 +130,7 @@ $("tabPersonnes").onclick = () => tab("personnes");
 // ── Liste de suggestions ──
 async function loadPeople() {
   try { people = await sbRpc("personnes_list", { p_password: pwd }) || []; }
-  catch (e) { people = []; $("pmsg").replaceChildren(el("div", "err", "Liste indisponible : " + e.message)); }
+  catch (e) { people = []; $("pmsg").replaceChildren(el("div", "err", "Personnes indisponibles : " + e.message)); }
   $("count").textContent = people.length ? "(" + people.length + ")" : "";
   $("people-list").replaceChildren(...people.map(p => { const o = document.createElement("option"); o.value = p.libelle; return o; }));
 }
@@ -180,7 +180,7 @@ function renderPeople() {
   const q = norm($("search").value);
   const rows = people.filter(p => !q || norm(p.libelle).includes(q));
   if (!rows.length) {
-    box.append(el("div", "empty", people.length ? "Aucun résultat." : "La liste est vide pour l'instant."));
+    box.append(el("div", "empty", people.length ? "Aucun résultat." : "Aucune personne pour l'instant."));
     return;
   }
   rows.forEach(p => box.append(personRow(p)));
@@ -218,7 +218,7 @@ function card(m) {
   const b = buvetteOf(m);
   const wrap = el("div", "");
   const form = el("div", "form single");
-  const inp = el("input"); inp.type = "text"; inp.placeholder = "Responsable buvette (texte libre)";
+  const inp = el("input"); inp.type = "text"; inp.placeholder = "Responsable buvette";
   inp.setAttribute("list", "people-list"); inp.autocomplete = "off"; inp.maxLength = 100;
   inp.value = b ? b.libelle : "";
   form.append(inp);

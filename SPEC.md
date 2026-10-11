@@ -103,7 +103,7 @@ Le mot de passe est défini par `admin_set_password` (réservé à la clé servi
 - Définition du weekend : samedi–dimanche par défaut.
 - Nom de domaine : `basket.buvette.varai.fr` (confirmé).
 - Notifications en cas d'échec de synchro : journal seulement en V1.
-- Mot de passe admin partagé : **actuellement VIDE (provisoire)**. À définir via `admin_set_password` avant toute mise en ligne publique de la page admin.
+- Mot de passe admin partagé : défini (non consigné ici). Changement via `admin_set_password` (clé service_role).
 
 ## 11. Plan de réalisation
 1. Test de découverte des équipes/poules depuis le PC (valide ou invalide la source auto).

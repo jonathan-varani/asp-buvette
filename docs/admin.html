@@ -24,19 +24,51 @@
 
   <div id="app" hidden>
     <div id="open" class="banner" hidden>⚠️ Aucun mot de passe n'est défini : la modification est ouverte à tous.</div>
-    <div class="nav">
-      <button id="prev" aria-label="Semaine précédente">‹</button>
-      <div class="title" id="title"></div>
-      <button id="next" aria-label="Semaine suivante">›</button>
-    </div>
-    <div class="tools">
-      <button class="chip" id="today">Aujourd'hui</button>
-      <button class="chip" id="onlyTodo" aria-pressed="false">À pourvoir seulement</button>
+    <div class="tools" style="margin-top:0">
+      <button class="chip" id="tabMatchs" aria-pressed="true">Matchs</button>
+      <button class="chip" id="tabPersonnes" aria-pressed="false">Personnes <span id="count"></span></button>
       <button class="chip ghost" id="logout">Se déconnecter</button>
     </div>
-    <p class="salle">Seuls les matchs à domicile ont un responsable de buvette. Laissez vide puis « Effacer » pour retirer.</p>
-    <div id="msg"></div>
-    <div id="list"></div>
+
+    <!-- Matchs -->
+    <section id="viewMatchs">
+      <div class="nav">
+        <button id="prev" aria-label="Semaine précédente">‹</button>
+        <div class="title" id="title"></div>
+        <button id="next" aria-label="Semaine suivante">›</button>
+      </div>
+      <div class="tools">
+        <button class="chip" id="today">Aujourd'hui</button>
+        <button class="chip" id="onlyTodo" aria-pressed="false">À pourvoir seulement</button>
+      </div>
+      <p class="salle">Seuls les matchs à domicile ont un responsable de buvette. Commencez à taper un nom pour le choisir dans la liste.</p>
+      <div id="emptyList" class="banner" hidden>La liste est vide : ajoutez des personnes dans l'onglet « Personnes ».</div>
+      <div id="msg"></div>
+      <div id="list"></div>
+    </section>
+
+    <!-- Personnes -->
+    <section id="viewPersonnes" hidden>
+      <div class="login" style="margin-top:0">
+        <strong>Ajouter une personne</strong>
+        <div class="form">
+          <input id="newPrenom" type="text" placeholder="Prénom" maxlength="40" autocomplete="off">
+          <input id="newNom" type="text" placeholder="Nom" maxlength="40" autocomplete="off">
+        </div>
+        <div class="actions"><button class="btn primary" id="addPerson">Ajouter</button><span id="addSt" class="saved"></span></div>
+        <details style="margin-top:12px">
+          <summary>Importer plusieurs personnes</summary>
+          <p class="salle">Une personne par ligne : « Prénom Nom ». Le premier mot est le prénom, le reste le nom. Pour un prénom composé, utilisez « Prénom;Nom ». Les doublons sont ignorés.</p>
+          <textarea id="bulk" rows="6" placeholder="Julie Martin&#10;Jean-Pierre;Dupont de la Tour"></textarea>
+          <div class="actions"><button class="btn" id="bulkGo">Importer</button><span id="bulkSt" class="saved"></span></div>
+        </details>
+      </div>
+      <div class="tools"><input id="search" type="text" placeholder="Rechercher dans la liste…" autocomplete="off"></div>
+      <div id="pmsg"></div>
+      <div id="people"></div>
+    </section>
+
+    <datalist id="people-list"></datalist>
   </div>
 </main>
 <script src="common.js"></script>
@@ -46,7 +78,10 @@ try { pwd = sessionStorage.getItem("buvette_pwd") || ""; } catch (e) {}
 let week = queryWeek();
 let todoOnly = false;
 let data = [];
+let people = [];
 const $ = id => document.getElementById(id);
+const norm = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+const label = p => p.prenom + " " + p.nom;
 
 async function tryLogin(p) {
   try { return await sbRpc("admin_check", { p_password: p }) === true; } catch (e) { return false; }
@@ -60,7 +95,11 @@ async function start() {
   $("login").hidden = false;
   $("app").hidden = true;
 }
-function showApp() { $("login").hidden = true; $("app").hidden = false; load(); }
+async function showApp() {
+  $("login").hidden = true; $("app").hidden = false;
+  await loadPeople();
+  load();
+}
 
 $("go").onclick = async () => {
   const p = $("pwd").value;
@@ -80,13 +119,119 @@ $("logout").onclick = () => {
   location.reload();
 };
 
+// ── Onglets ──
+function tab(name) {
+  const m = name === "matchs";
+  $("viewMatchs").hidden = !m; $("viewPersonnes").hidden = m;
+  $("tabMatchs").setAttribute("aria-pressed", String(m));
+  $("tabPersonnes").setAttribute("aria-pressed", String(!m));
+  if (m) render(); else renderPeople();
+}
+$("tabMatchs").onclick = () => tab("matchs");
+$("tabPersonnes").onclick = () => tab("personnes");
+
+// ── Liste des personnes ──
+async function loadPeople() {
+  try { people = await sbRpc("personnes_list", { p_password: pwd }) || []; }
+  catch (e) { people = []; $("pmsg").replaceChildren(el("div", "err", "Liste des personnes indisponible : " + e.message)); }
+  $("count").textContent = people.length ? "(" + people.length + ")" : "";
+  const dl = $("people-list");
+  dl.replaceChildren(...people.map(p => { const o = document.createElement("option"); o.value = label(p); return o; }));
+  $("emptyList").hidden = people.length > 0;
+}
+
+function personRow(p) {
+  const row = el("div", "prow");
+  const show = () => {
+    row.replaceChildren();
+    const name = el("span", "pname", label(p));
+    const edit = el("button", "btn", "Modifier");
+    const del = el("button", "btn", "Supprimer");
+    edit.onclick = editMode;
+    del.onclick = () => {
+      del.textContent = "Confirmer ?"; del.classList.add("primary");
+      del.onclick = async () => {
+        try { await sbRpc("personne_delete", { p_password: pwd, p_id: p.id }); await loadPeople(); renderPeople(); }
+        catch (e) { $("pmsg").replaceChildren(el("div", "err", e.message)); }
+      };
+      setTimeout(() => { if (row.isConnected) show(); }, 4000);
+    };
+    row.append(name, edit, del);
+  };
+  const editMode = () => {
+    row.replaceChildren();
+    const pr = el("input"); pr.type = "text"; pr.value = p.prenom; pr.maxLength = 40;
+    const nm = el("input"); nm.type = "text"; nm.value = p.nom; nm.maxLength = 40;
+    const ok = el("button", "btn primary", "OK");
+    const no = el("button", "btn", "Annuler");
+    ok.onclick = async () => {
+      if (!pr.value.trim() || !nm.value.trim()) return;
+      try {
+        await sbRpc("personne_update", { p_password: pwd, p_id: p.id, p_prenom: pr.value, p_nom: nm.value });
+        await loadPeople(); renderPeople();
+      } catch (e) { $("pmsg").replaceChildren(el("div", "err", e.message)); }
+    };
+    no.onclick = show;
+    row.append(pr, nm, ok, no);
+  };
+  show();
+  return row;
+}
+
+function renderPeople() {
+  const box = $("people");
+  box.replaceChildren();
+  const q = norm($("search").value);
+  const rows = people.filter(p => !q || norm(label(p)).includes(q));
+  if (!rows.length) {
+    box.append(el("div", "empty", people.length ? "Aucun résultat." : "Aucune personne dans la liste pour l'instant."));
+    return;
+  }
+  rows.forEach(p => box.append(personRow(p)));
+}
+$("search").addEventListener("input", renderPeople);
+
+$("addPerson").onclick = async () => {
+  const pr = $("newPrenom").value, nm = $("newNom").value, st = $("addSt");
+  st.style.color = "";
+  if (!pr.trim() || !nm.trim()) { st.textContent = "Prénom et nom requis"; st.style.color = "var(--red-dark)"; return; }
+  try {
+    await sbRpc("personne_add", { p_password: pwd, p_prenom: pr, p_nom: nm });
+    $("newPrenom").value = ""; $("newNom").value = "";
+    st.textContent = "✓ Ajouté";
+    await loadPeople(); renderPeople();
+    $("newPrenom").focus();
+  } catch (e) { st.textContent = e.message; st.style.color = "var(--red-dark)"; }
+};
+$("newNom").addEventListener("keydown", e => { if (e.key === "Enter") $("addPerson").click(); });
+
+$("bulkGo").onclick = async () => {
+  const st = $("bulkSt");
+  const items = [];
+  for (const line of $("bulk").value.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t) continue;
+    if (t.includes(";")) { const [a, ...b] = t.split(";"); items.push({ prenom: a, nom: b.join(";") }); }
+    else { const w = t.split(/\s+/); if (w.length >= 2) items.push({ prenom: w[0], nom: w.slice(1).join(" ") }); }
+  }
+  if (!items.length) { st.textContent = "Rien à importer"; return; }
+  try {
+    const n = await sbRpc("personnes_import", { p_password: pwd, p_noms: items });
+    st.textContent = "✓ " + n + " ajouté(s)" + (n < items.length ? ", " + (items.length - n) + " doublon(s) ignoré(s)" : "");
+    $("bulk").value = "";
+    await loadPeople(); renderPeople();
+  } catch (e) { st.textContent = e.message; }
+};
+
+// ── Matchs ──
 function card(m) {
   const b = buvetteOf(m);
   const wrap = el("div", "");
-  const form = el("div", "form");
-  const pr = el("input"); pr.type = "text"; pr.placeholder = "Prénom"; pr.value = b ? b.prenom : ""; pr.maxLength = 40; pr.autocomplete = "off";
-  const nm = el("input"); nm.type = "text"; nm.placeholder = "Nom"; nm.value = b ? b.nom : ""; nm.maxLength = 40; nm.autocomplete = "off";
-  form.append(pr, nm);
+  const form = el("div", "form single");
+  const inp = el("input"); inp.type = "text"; inp.placeholder = "Responsable (tapez pour chercher)";
+  inp.setAttribute("list", "people-list"); inp.autocomplete = "off"; inp.maxLength = 80;
+  inp.value = b ? b.prenom + " " + b.nom : "";
+  form.append(inp);
   const act = el("div", "actions");
   const save = el("button", "btn primary", "Enregistrer");
   const clear = el("button", "btn", "Effacer");
@@ -94,19 +239,23 @@ function card(m) {
   act.append(save, clear, st);
   const flash = (t, bad) => { st.textContent = t; st.style.color = bad ? "var(--red-dark)" : ""; };
   save.onclick = async () => {
-    if (!pr.value.trim() || !nm.value.trim()) return flash("Prénom et nom requis", true);
+    const v = norm(inp.value);
+    if (!v) return flash("Choisissez une personne", true);
+    const p = people.find(x => norm(label(x)) === v);
+    if (!p) return flash("Absent de la liste : ajoutez-le dans l'onglet Personnes", true);
     save.disabled = true;
     try {
-      await sbRpc("buvette_set", { p_password: pwd, p_match_id: m.id, p_prenom: pr.value, p_nom: nm.value });
+      await sbRpc("buvette_set", { p_password: pwd, p_match_id: m.id, p_prenom: p.prenom, p_nom: p.nom });
+      inp.value = label(p);
+      m.buvette = { prenom: p.prenom, nom: p.nom };
       flash("✓ Enregistré");
-      m.buvette = { prenom: pr.value.trim(), nom: nm.value.trim() };
     } catch (e) { flash(e.message, true); }
     save.disabled = false;
   };
   clear.onclick = async () => {
     try {
       await sbRpc("buvette_clear", { p_password: pwd, p_match_id: m.id });
-      pr.value = ""; nm.value = ""; m.buvette = null;
+      inp.value = ""; m.buvette = null;
       flash("✓ Effacé");
     } catch (e) { flash(e.message, true); }
   };
